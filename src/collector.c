@@ -38,7 +38,8 @@ static void *node_collector_thread(void *arg) {
             "/^SwapTotal:/ { print \"SWAPTOTAL\", $2 } "
             "/^SwapFree:/ { print \"SWAPFREE\", $2 }' /proc/stat /proc/meminfo; "
             "awk '{ print \"LOAD\", $1, $2, $3 }' /proc/loadavg; "
-            "df -k / /mnt/data /mnt/kof17 2>/dev/null | awk 'NR>1 { print \"DISK\", $6, $2, $3, $5 }'");
+            "df -k / /mnt/data /mnt/kof17 2>/dev/null | awk 'NR>1 { print \"DISK\", $6, $2, $3, $5 }'; "
+            "journalctl -n 16 --no-pager -q -o short-iso 2>/dev/null | awk '{ match($1, /[0-9]{2}:[0-9]{2}:[0-9]{2}/); t = substr($1, RSTART, RLENGTH); $1=\"\"; $2=\"\"; sub(/^  */, \"\"); print \"JRNL\", t, $0 }'");
     } else {
         snprintf(cmd, sizeof(cmd),
             "ssh -o BatchMode=yes -o ConnectTimeout=2 -o ServerAliveInterval=2 -o ServerAliveCountMax=2 %s "
@@ -49,7 +50,8 @@ static void *node_collector_thread(void *arg) {
             "/^SwapTotal:/ { print \\\"SWAPTOTAL\\\", \\$2 } "
             "/^SwapFree:/ { print \\\"SWAPFREE\\\", \\$2 }' /proc/stat /proc/meminfo; "
             "awk '{ print \\\"LOAD\\\", \\$1, \\$2, \\$3 }' /proc/loadavg; "
-            "df -k / /mnt/data /mnt/kof17 2>/dev/null | awk 'NR>1 { print \\\"DISK\\\", \\$6, \\$2, \\$3, \\$5 }'\"",
+            "df -k / /mnt/data /mnt/kof17 2>/dev/null | awk 'NR>1 { print \\\"DISK\\\", \\$6, \\$2, \\$3, \\$5 }'; "
+            "journalctl -n 16 --no-pager -q -o short-iso 2>/dev/null | awk '{ match(\\$1, /[0-9]{2}:[0-9]{2}:[0-9]{2}/); t = substr(\\$1, RSTART, RLENGTH); \\$1=\\\"\\\"; \\$2=\\\"\\\"; sub(/^  */, \\\"\\\"); print \\\"JRNL\\\", t, \\$0 }'\"",
             node->name);
     }
 
@@ -78,6 +80,8 @@ static void *node_collector_thread(void *arg) {
             double l1 = 0.0, l5 = 0.0, l15 = 0.0;
             DiskInfo disks_tmp[MAX_DISKS];
             int num_disks_tmp = 0;
+            char journal_tmp[MAX_JOURNAL_LINES][JOURNAL_LINE_LEN];
+            int num_journal_tmp = 0;
 
             while (fgets(line, sizeof(line), fp)) {
                 got_data = true;
@@ -124,6 +128,18 @@ static void *node_collector_thread(void *arg) {
                             num_disks_tmp++;
                         }
                     }
+                } else if (strncmp(line, "JRNL", 4) == 0) {
+                    if (num_journal_tmp < MAX_JOURNAL_LINES) {
+                        char *entry = line + 5;
+                        size_t l_len = strlen(entry);
+                        while (l_len > 0 && (entry[l_len - 1] == '\n' || entry[l_len - 1] == '\r')) {
+                            entry[--l_len] = '\0';
+                        }
+                        if (l_len > 0) {
+                            snprintf(journal_tmp[num_journal_tmp], JOURNAL_LINE_LEN, "%s", entry);
+                            num_journal_tmp++;
+                        }
+                    }
                 }
             }
 
@@ -167,6 +183,12 @@ static void *node_collector_thread(void *arg) {
                 node->num_disks = num_disks_tmp;
                 for (int i = 0; i < num_disks_tmp; i++) {
                     node->disks[i] = disks_tmp[i];
+                }
+
+                node->num_journal_lines = num_journal_tmp;
+                for (int i = 0; i < num_journal_tmp; i++) {
+                    memcpy(node->journal_lines[i], journal_tmp[i], JOURNAL_LINE_LEN);
+                    node->journal_lines[i][JOURNAL_LINE_LEN - 1] = '\0';
                 }
             } else {
                 node->is_online = false;

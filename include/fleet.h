@@ -10,6 +10,8 @@
 #define MAX_CORES 32
 #define MAX_DISKS 4
 #define MAX_NODES 3
+#define MAX_JOURNAL_LINES 16
+#define JOURNAL_LINE_LEN 512
 
 typedef struct {
     uint64_t total;
@@ -55,6 +57,10 @@ typedef struct {
     /* Disks */
     int num_disks;
     DiskInfo disks[MAX_DISKS];
+
+    /* Live Journal */
+    int num_journal_lines;
+    char journal_lines[MAX_JOURNAL_LINES][JOURNAL_LINE_LEN];
 
     pthread_mutex_t lock;
     pthread_t thread;

@@ -263,6 +263,44 @@ static void render_node_panel(WINDOW *win, FleetNode *node, int h, int w) {
         }
     }
 
+    /* Live Journal Section in spare space below graphs */
+    y += 2;
+    if (y < h - 3) {
+        wattron(win, COLOR_PAIR(PAIR_CYAN));
+        mvwprintw(win, y, 2, "── Live Journal ");
+        for (int i = getcurx(win); i < w - 2; i++) wprintw(win, "─");
+        wattroff(win, COLOR_PAIR(PAIR_CYAN));
+
+        y++;
+        int avail_lines = (h - 1) - y;
+        if (avail_lines > 0 && n.num_journal_lines > 0) {
+            int start_idx = 0;
+            if (n.num_journal_lines > avail_lines) {
+                start_idx = n.num_journal_lines - avail_lines;
+            }
+            int max_chars = w - 4;
+            if (max_chars < 1) max_chars = 1;
+
+            for (int i = start_idx; i < n.num_journal_lines && y < h - 1; i++) {
+                const char *line_text = n.journal_lines[i];
+
+                /* Determine highlighting based on content */
+                int pair = PAIR_DIM;
+                if (strcasestr(line_text, "error") || strcasestr(line_text, "fail") ||
+                    strcasestr(line_text, "panic") || strcasestr(line_text, "crit")) {
+                    pair = PAIR_RED;
+                } else if (strcasestr(line_text, "warn")) {
+                    pair = PAIR_YELLOW;
+                }
+
+                wattron(win, COLOR_PAIR(pair));
+                mvwprintw(win, y, 2, "%.*s", max_chars, line_text);
+                wattroff(win, COLOR_PAIR(pair));
+                y++;
+            }
+        }
+    }
+
     /* Non-blocking buffer update */
     wnoutrefresh(win);
 }
