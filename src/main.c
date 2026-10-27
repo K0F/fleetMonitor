@@ -20,11 +20,14 @@ void fleet_init(FleetCluster *fleet, double refresh_rate) {
     fleet->running = true;
     fleet->refresh_rate_sec = refresh_rate;
 
+    char current_host[64] = {0};
+    gethostname(current_host, sizeof(current_host) - 1);
+
     /* Node 0: bazina (Left) */
     strncpy(fleet->nodes[0].name, "bazina", sizeof(fleet->nodes[0].name) - 1);
     strncpy(fleet->nodes[0].ip, "10.0.0.15", sizeof(fleet->nodes[0].ip) - 1);
     strncpy(fleet->nodes[0].role, "Debian 13 (Navi 10 GPU, ASUS HDMI)", sizeof(fleet->nodes[0].role) - 1);
-    fleet->nodes[0].is_local = false;
+    fleet->nodes[0].is_local = (strcasecmp(current_host, "bazina") == 0);
     fleet->nodes[0].is_online = false;
     fleet->nodes[0].num_cores = 4;
     pthread_mutex_init(&fleet->nodes[0].lock, NULL);
@@ -33,7 +36,7 @@ void fleet_init(FleetCluster *fleet, double refresh_rate) {
     strncpy(fleet->nodes[1].name, "t520", sizeof(fleet->nodes[1].name) - 1);
     strncpy(fleet->nodes[1].ip, "10.0.0.18", sizeof(fleet->nodes[1].ip) - 1);
     strncpy(fleet->nodes[1].role, "Manjaro (KVM Server, NTP Master)", sizeof(fleet->nodes[1].role) - 1);
-    fleet->nodes[1].is_local = true;
+    fleet->nodes[1].is_local = (strcasecmp(current_host, "t520") == 0);
     fleet->nodes[1].is_online = false;
     fleet->nodes[1].num_cores = 8;
     pthread_mutex_init(&fleet->nodes[1].lock, NULL);
@@ -42,7 +45,7 @@ void fleet_init(FleetCluster *fleet, double refresh_rate) {
     strncpy(fleet->nodes[2].name, "boxC", sizeof(fleet->nodes[2].name) - 1);
     strncpy(fleet->nodes[2].ip, "10.0.0.14", sizeof(fleet->nodes[2].ip) - 1);
     strncpy(fleet->nodes[2].role, "Pi OS (916GB kof17 NFS/Samba)", sizeof(fleet->nodes[2].role) - 1);
-    fleet->nodes[2].is_local = false;
+    fleet->nodes[2].is_local = (strcasecmp(current_host, "boxC") == 0);
     fleet->nodes[2].is_online = false;
     fleet->nodes[2].num_cores = 4;
     pthread_mutex_init(&fleet->nodes[2].lock, NULL);
