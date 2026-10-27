@@ -92,19 +92,16 @@ int main(int argc, char *argv[]) {
     fleet_init(&g_fleet, refresh_rate);
     collector_start(&g_fleet);
     ui_init();
+    timeout(100); /* 100ms non-busy input poll (10 FPS smooth updates) */
 
     while (g_fleet.running) {
         int ch = getch();
         if (ch == 'q' || ch == 'Q' || ch == 27) { /* 27 is ESC */
             g_fleet.running = false;
             break;
-        } else if (ch == KEY_RESIZE) {
-            /* Terminal resized */
-            clear();
         }
 
         ui_render(&g_fleet);
-        usleep(50000); /* 50ms UI loop (20 FPS responsive redraw) */
     }
 
     ui_destroy();

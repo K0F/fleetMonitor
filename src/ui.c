@@ -17,6 +17,19 @@
 #define PAIR_STATUSBAR 8
 #define PAIR_DIM       9
 
+static WINDOW *s_panels[MAX_NODES] = {NULL, NULL, NULL};
+static int s_prev_max_y = -1;
+static int s_prev_max_x = -1;
+
+static void cleanup_windows(void) {
+    for (int i = 0; i < MAX_NODES; i++) {
+        if (s_panels[i]) {
+            delwin(s_panels[i]);
+            s_panels[i] = NULL;
+        }
+    }
+}
+
 void ui_init(void) {
     setlocale(LC_ALL, "");
     initscr();
@@ -42,6 +55,7 @@ void ui_init(void) {
 }
 
 void ui_destroy(void) {
+    cleanup_windows();
     endwin();
 }
 
@@ -129,11 +143,11 @@ static void render_node_panel(WINDOW *win, FleetNode *node, int h, int w) {
     int bar_w = w - 24;
     if (bar_w < 8) bar_w = 8;
     draw_bar(win, y, 13, bar_w, n.total_cpu_usage);
-    
+
     int pct_color = PAIR_GREEN;
     if (n.total_cpu_usage >= 85.0) pct_color = PAIR_RED;
     else if (n.total_cpu_usage >= 60.0) pct_color = PAIR_YELLOW;
-    
+
     wattron(win, COLOR_PAIR(pct_color) | A_BOLD);
     mvwprintw(win, y, 14 + bar_w, "%5.1f%%", n.total_cpu_usage);
     wattroff(win, COLOR_PAIR(pct_color) | A_BOLD);
@@ -249,16 +263,43 @@ static void render_node_panel(WINDOW *win, FleetNode *node, int h, int w) {
         }
     }
 
-    wrefresh(win);
+    /* Non-blocking buffer update */
+    wnoutrefresh(win);
 }
 
 void ui_render(FleetCluster *fleet) {
     int max_y, max_x;
     getmaxyx(stdscr, max_y, max_x);
 
-    erase();
+    /* Check if screen geometry changed */
+    if (max_y != s_prev_max_y || max_x != s_prev_max_x) {
+        cleanup_windows();
+        clear();
+        s_prev_max_y = max_y;
+        s_prev_max_x = max_x;
 
-    /* Header Banner */
+        int content_top = 2;
+        int content_h = max_y - content_top - 2;
+        if (content_h < 1) content_h = 1;
+
+        if (max_x >= 108) {
+            int panel_w = max_x / 3;
+            for (int i = 0; i < MAX_NODES; i++) {
+                int cur_x = i * panel_w;
+                int cur_w = (i == MAX_NODES - 1) ? (max_x - cur_x) : panel_w;
+                s_panels[i] = newwin(content_h, cur_w, content_top, cur_x);
+            }
+        } else {
+            int panel_h = content_h / 3;
+            if (panel_h < 8) panel_h = 8;
+            for (int i = 0; i < MAX_NODES; i++) {
+                int cur_y = content_top + i * panel_h;
+                s_panels[i] = newwin(panel_h, max_x, cur_y, 0);
+            }
+        }
+    }
+
+    /* Header Banner on stdscr */
     wattron(stdscr, COLOR_PAIR(PAIR_CYAN) | A_BOLD);
     mvwprintw(stdscr, 0, 2, "⚡ FLEET MONITOR");
     wattroff(stdscr, COLOR_PAIR(PAIR_CYAN) | A_BOLD);
@@ -300,32 +341,15 @@ void ui_render(FleetCluster *fleet) {
     }
     double fleet_cpu_avg = online_nodes > 0 ? (fleet_cpu_sum / online_nodes) : 0.0;
 
-    /* Render Panels: 3 columns if wide enough, otherwise 3 rows */
+    /* Render Panels */
     int content_top = 2;
     int content_h = max_y - content_top - 2;
+    int panel_w = (max_x >= 108) ? (max_x / 3) : max_x;
 
-    if (max_x >= 108) {
-        int panel_w = max_x / 3;
-        for (int i = 0; i < MAX_NODES; i++) {
-            int cur_x = i * panel_w;
-            int cur_w = (i == MAX_NODES - 1) ? (max_x - cur_x) : panel_w;
-            WINDOW *pwin = newwin(content_h, cur_w, content_top, cur_x);
-            if (pwin) {
-                render_node_panel(pwin, &fleet->nodes[i], content_h, cur_w);
-                delwin(pwin);
-            }
-        }
-    } else {
-        int panel_h = content_h / 3;
-        if (panel_h < 8) panel_h = 8;
-        for (int i = 0; i < MAX_NODES; i++) {
-            int cur_y = content_top + i * panel_h;
-            if (cur_y + panel_h > max_y - 2) break;
-            WINDOW *pwin = newwin(panel_h, max_x, cur_y, 0);
-            if (pwin) {
-                render_node_panel(pwin, &fleet->nodes[i], panel_h, max_x);
-                delwin(pwin);
-            }
+    for (int i = 0; i < MAX_NODES; i++) {
+        if (s_panels[i]) {
+            int cur_w = (max_x >= 108 && i == MAX_NODES - 1) ? (max_x - i * panel_w) : panel_w;
+            render_node_panel(s_panels[i], &fleet->nodes[i], content_h, cur_w);
         }
     }
 
@@ -347,5 +371,7 @@ void ui_render(FleetCluster *fleet) {
     mvwprintw(stdscr, max_y - 1, max_x - (int)strlen(hotkeys) - 2, "%s", hotkeys);
     wattroff(stdscr, COLOR_PAIR(PAIR_STATUSBAR));
 
-    refresh();
+    /* Double-buffering atomic update: stdscr and panels sent in single diff */
+    wnoutrefresh(stdscr);
+    doupdate();
 }
