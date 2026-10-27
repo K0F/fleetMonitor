@@ -28,7 +28,7 @@ static double calculate_pct(CpuTicks current, CpuTicks *prev) {
 static void *node_collector_thread(void *arg) {
     FleetNode *node = (FleetNode *)arg;
 
-    char cmd[2048];
+    char cmd[4096];
     if (node->is_local) {
         snprintf(cmd, sizeof(cmd),
             "awk '/^cpu[0-9]/ { print \"CORE\", $1, $2, $3, $4, $5, $6, $7, $8 } "
@@ -39,7 +39,10 @@ static void *node_collector_thread(void *arg) {
             "/^SwapFree:/ { print \"SWAPFREE\", $2 }' /proc/stat /proc/meminfo; "
             "awk '{ print \"LOAD\", $1, $2, $3 }' /proc/loadavg; "
             "df -k / /mnt/data /mnt/kof17 2>/dev/null | awk 'NR>1 { print \"DISK\", $6, $2, $3, $5 }'; "
-            "journalctl -n 16 --no-pager -q -o short-iso 2>/dev/null | awk '{ match($1, /[0-9]{2}:[0-9]{2}:[0-9]{2}/); t = substr($1, RSTART, RLENGTH); $1=\"\"; $2=\"\"; sub(/^  */, \"\"); print \"JRNL\", t, $0 }'");
+            "journalctl -n 250 --no-pager -q -o short-iso 2>/dev/null | awk '"
+            "/(sshd|sshd-session|systemd-logind|session-[0-9]+\\.scope|[sS]ession [0-9]+ of [uU]ser|pam_unix\\(sshd|pam_env\\(sshd)/ { next } "
+            "{ match($1, /[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/); t = substr($1, RSTART, RLENGTH); $1=\"\"; $2=\"\"; sub(/^  */, \"\"); lines[count++] = sprintf(\"JRNL %%s %%s\", t, $0) } "
+            "END { start = (count > 16) ? count - 16 : 0; for (i = start; i < count; i++) print lines[i] }'");
     } else {
         snprintf(cmd, sizeof(cmd),
             "ssh -o BatchMode=yes -o ConnectTimeout=2 -o ServerAliveInterval=2 -o ServerAliveCountMax=2 %s "
@@ -51,7 +54,10 @@ static void *node_collector_thread(void *arg) {
             "/^SwapFree:/ { print \\\"SWAPFREE\\\", \\$2 }' /proc/stat /proc/meminfo; "
             "awk '{ print \\\"LOAD\\\", \\$1, \\$2, \\$3 }' /proc/loadavg; "
             "df -k / /mnt/data /mnt/kof17 2>/dev/null | awk 'NR>1 { print \\\"DISK\\\", \\$6, \\$2, \\$3, \\$5 }'; "
-            "journalctl -n 16 --no-pager -q -o short-iso 2>/dev/null | awk '{ match(\\$1, /[0-9]{2}:[0-9]{2}:[0-9]{2}/); t = substr(\\$1, RSTART, RLENGTH); \\$1=\\\"\\\"; \\$2=\\\"\\\"; sub(/^  */, \\\"\\\"); print \\\"JRNL\\\", t, \\$0 }'\"",
+            "journalctl -n 250 --no-pager -q -o short-iso 2>/dev/null | awk '"
+            "/(sshd|sshd-session|systemd-logind|session-[0-9]+\\.scope|[sS]ession [0-9]+ of [uU]ser|pam_unix\\(sshd|pam_env\\(sshd)/ { next } "
+            "{ match(\\$1, /[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/); t = substr(\\$1, RSTART, RLENGTH); \\$1=\\\"\\\"; \\$2=\\\"\\\"; sub(/^  */, \\\"\\\"); lines[count++] = sprintf(\\\"JRNL %%s %%s\\\", t, \\$0) } "
+            "END { start = (count > 16) ? count - 16 : 0; for (i = start; i < count; i++) print lines[i] }'\"",
             node->name);
     }
 
